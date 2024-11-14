@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulaire Utilisateur</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <section> <h2>Créer un utilisateur</h2>
+    <form id="userForm" action="/utilisateurs" method="post">
+        <label for="nom">Nom:</label>
+        <input type="text" id="nom" name="nom" required><br>
+
+        <label for="prenom">Prénom:</label>
+        <input type="text" id="prenom" name="prenom" required><br>
+
+        <label for="date">Date:</label>
+        <input type="date" id="date" name="date" required><br>
+
+        <input type="hidden" id="csrfToken" name="_csrf">
+        <button type="submit">Créer</button>
+    </form>
+</section>
+<section><button id="show">Voir les utilisateurs</button>
+    <div id="userList">Liste</div>
+</section>
+<section>
+    <div id="editDialog" style="display: none;">
+        <form id="editForm">
+            <label for="editNom">Nom:</label>
+            <input type="text" id="editNom" name="nom" required><br>
+
+            <label for="editPrenom">Prénom:</label>
+            <input type="text" id="editPrenom" name="prenom" required><br>
+
+            <label for="editDate">Date:</label>
+            <input type="date" id="editDate" name="date" required><br>
+
+            <input type="hidden" id="editUserId" name="id">
+            <input type="hidden" id="editCsrfToken" name="_csrf">
+            <button type="submit">Modifier</button>
+        </form>
+    </div>
+</section>
+    <script>
+        // Fetch CSRF token and set it in the form
+        fetch('/csrf-token')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('csrfToken').value = data.csrfToken;
+                document.getElementById('editCsrfToken').value = data.csrfToken;
+            });
+
+        document.getElementById('userForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const csrfToken = formData.get('_csrf');
+
+            fetch('/utilisateurs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(Object.fromEntries(formData))
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.errors) {
+                    alert('Erreur: ' + data.errors.map(e => e.msg).join(', '));
+                } else {
+                    alert('Utilisateur créé avec succès!');
+                    document.getElementById('userForm').reset();
+                    document.getElementById('show').click();
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la création de l\'utilisateur:', error);
+                alert('Erreur lors de la création de l\'utilisateur');
+            });
+        });
+
+        document.getElementById('editForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const userId = formData.get('id');
+            const csrfToken = formData.get('_csrf');
+
+            fetch(`/utilisateurs/${userId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'CSRF-Token': csrfToken
+                },
+                body: JSON.stringify(Object.fromEntries(formData))
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.errors) {
+                    alert('Erreur: ' + data.errors.map(e => e.msg).join(', '));
+                } else {
+                    alert('Utilisateur modifié avec succès!');
+                    document.getElementById('editDialog').style.display = 'none';
+                    document.getElementById('show').click();
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la modification de l\'utilisateur:', error);
+                alert('Erreur lors de la modification de l\'utilisateur');
+            });
+        });
+
+        // Fetch users and populate the user list
+        document.getElementById('show').addEventListener('click', function() {
+            fetch('/utilisateurs')
+                .then(response => response.json())
+                .then(users => {
+                    const userListDiv = document.getElementById('userList');
+                    userListDiv.innerHTML = ''; // Clear previous content
+
+                    users.forEach(user => {
+                        const userDiv = document.createElement('div');
+                        userDiv.classList.add('user');
+                        userDiv.innerHTML = `
+                            <strong>${user.nom}</strong> - ${user.prenom} - ${user.date}
+                            <button class="edit-btn" data-id="${user.id}">Modifier</button>
+                            <button class="delete-btn" data-id="${user.id}">Supprimer</button>
+                        `;
+
+                        // Add event listeners for edit and delete buttons
+                        const editBtn = userDiv.querySelector('.edit-btn');
+                        const deleteBtn = userDiv.querySelector('.delete-btn');
+
+                        // Handle edit button click
+                        editBtn.addEventListener('click', function() {
+                            document.getElementById('editNom').value = user.nom;
+                            document.getElementById('editPrenom').value = user.prenom;
+                            document.getElementById('editDate').value = user.date;
+                            document.getElementById('editUserId').value = user.id;
+                            document.getElementById('editDialog').style.display = 'block';
+                        });
+
+                        // Handle delete button click
+                        deleteBtn.addEventListener('click', function() {
+                            const csrfToken = document.getElementById('csrfToken').value;
+                            fetch(`/utilisateurs/${user.id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'CSRF-Token': csrfToken
+                                }
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.message) {
+                                    alert(data.message);
+                                    // Refresh the user list
+                                    document.getElementById('show').click();
+                                } else {
+                                    alert('Erreur lors de la suppression de l\'utilisateur');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erreur lors de la suppression de l\'utilisateur:', error);
+                                alert('Erreur lors de la suppression de l\'utilisateur');
+                            });
+                        });
+
+                        userListDiv.appendChild(userDiv);
+                    });
+                })
+                .catch(error => {
+                    console.error('Erreur lors de la récupération des utilisateurs:', error);
+                    alert('Erreur lors de la récupération des utilisateurs');
+                });
+        });
+    </script>
+</body>
+</html>
